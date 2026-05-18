@@ -52,6 +52,33 @@
 !  store xyme(indx)%v(j) = V_J(a,b,c,d)  with unique and compact storage
 !   
 !
+ module nopdef
+  type nospindex
+    integer :: it
+    integer :: n,l,j
+    integer :: orbit = -1
+  end type
+
+  type obmej
+    integer :: cp=-1
+    integer :: dp=-1
+    real :: obme = 0.0
+  end type
+
+ end module nopdef
+
+ module noparticle
+   use nopdef
+   use iso_c_binding, only: c_double
+
+   type (nospindex), allocatable :: nosp(:)
+   type (obmej),allocatable,target :: noobmep(:),noobmen(:)
+   integer :: orbit_number
+   real betacm
+   real(c_double) no2b_zero_body
+
+ end module noparticle
+
 
 !
 !=================================================================== 
@@ -135,8 +162,10 @@ subroutine master_readin_tbmes(J2only)
         case (1,2,3) 
            call readv2bme_mfd(firstread,formattedfile,intfiletype) 
 		   
-		   case (4,5)
-		   call readv2bme_xpn(firstread,formattedfile,intfiletype) 
+			   case (4,5)
+			   call readv2bme_xpn(firstread,formattedfile,intfiletype)
+           case(6)
+           call read_in_no2b_bin(firstread)
         end select 
         if(.not.firstread)then
 		   print*,' '
@@ -219,10 +248,13 @@ do while(.not.success)
              print*,' Enter name of two-body interaction file in explicit proton-neutron format ' 
 	
 		 case('def','iso')
-              print*,' Enter two-body interaction file name OR file format code (e.g., XPN) ' 
-              print*,' (Enter "end" to finish; "opt" for file format options; "?" for  general info ) ' 
-	     
-		 case default
+	              print*,' Enter two-body interaction file name OR file format code (e.g., XPN) '
+	              print*,' (Enter "end" to finish; "opt" for file format options; "?" for  general info ) '
+
+             case('no2')
+                  print*,' Enter two-body interaction file name in no2b (e.g., .bin) '
+
+			 case default
 		    print*,' variable formatchar not properly set ',formatchar
 			print*,' STOPPING RUN '
 #ifdef _MPI
@@ -238,10 +270,11 @@ do while(.not.success)
 		print*,' BIGSTICK TBME FILE FORMAT OPTIONS '
 		print*,' (for more details see the Inside Guide with your distribution )'
 		print*,' (iso) Isospin formalism, similar to OXBASH/NuShell format. DEFAULT '
-		print*,' (mfd) MFD format with further options for isospin breaking. DEFAULT '
-		print*,' (xpn) Explict p-n formalism (with normalized p-n matrix elements )'
-		print*,' (upn) Like xpn, but with so-called unnormalized p-n matrix elements'
-		print*,'  '
+			print*,' (mfd) MFD format with further options for isospin breaking. DEFAULT '
+			print*,' (xpn) Explict p-n formalism (with normalized p-n matrix elements )'
+			print*,' (upn) Like xpn, but with so-called unnormalized p-n matrix elements'
+            print*,' (no2) no2b form or interaction contains 0,1,2body part'
+			print*,'  '
 		print*,' DEFAULTS '
 		print*,' If no file format specified,  BIGSTICK will assume iso/mfd format '
 		print*,' Suppose you enter XXX as the file name.  '
@@ -317,10 +350,14 @@ do while(.not.success)
   	      cycle
   	    case ('mfd','MFD')
   		  formatchar = 'mfd'
-		  if(.not.auto_input)write(autoinputfile,'(a)')'mfd'
-		  cycle
-  	      		  		  
-     end select
+			  if(.not.auto_input)write(autoinputfile,'(a)')'mfd'
+			  cycle
+            case('no2','NO2')
+              formatchar = 'no2'
+              if(.not.auto_input)write(autoinputfile,'(a)')'no2'
+              cycle
+
+	     end select
 
 !	if(tmpfilename(1:3)=='def' .or. tmpfilename(1:3)=='iso' .or. tmpfilename(1:3)=='xpn' .or. tmpfilename(1:3)=='upn')cycle
 	
@@ -460,11 +497,37 @@ do while(.not.success)
 		  end if
 	  end if
 	  if(success)exit
-	  if(.not.success .and.(formatchar /='mfd' .and. formatchar /='def') )then
-		  write(6,*)' file ',intfilename(1:ilast)//'.int does not exist '
-		  cycle
-	  end if
-	  if(.not.success)then  ! try to open a MFD file 	
+		  if(.not.success .and.(formatchar /='mfd' .and. formatchar /='def'.and. formatchar /='no2') )then
+			  write(6,*)' file ',intfilename(1:ilast)//'.int does not exist '
+			  cycle
+		  end if
+          if(.not.success.and. formatchar =='no2')then !try to open no2b.bin
+             inquire(file=intfilename(1:ilast),exist=success)
+             print*,intfilename(1:ilast)
+             if(success)then
+                open(unit=1,file=intfilename(1:ilast),status='old',action='read',access='stream', form='unformatted')
+                write(6,*)' opening NO2B-style file ',intfilename(1:ilast)
+             else
+                inquire(file=int_path(1:length_int_path)//intfilename(1:ilast),exist=success)
+                if(success)then
+                   open(unit=1,file=int_path(1:length_int_path)//intfilename(1:ilast), &
+                        status='old',action='read',access='stream', form='unformatted')
+                   write(6,*)' opening NO2B-style file ',int_path(1:length_int_path)//intfilename(1:ilast)
+                   write(logfile,*)' opening NO2B-style file ',int_path(1:length_int_path)//intfilename(1:ilast)
+                end if
+             end if
+          end if
+          if(success)then   ! successfully opened no2-style format
+             if(.not.auto_input)write(autoinputfile,'(a)')intfilename(1:ilast)
+             emptyham=.false.
+             intfiletype = 6
+             exit
+          end if
+          if(.not.success .and.(formatchar /='mfd' .and. formatchar /='def') )then
+             write(6,*)' file ',intfilename(1:ilast)//'.int does not exist '
+             cycle
+          end if
+		  if(.not.success)then  ! try to open a MFD file
 	      inquire(file=intfilename(1:ilast),exist=success) 
 	      if(success)then 
 	         open(unit=1,file=intfilename(1:ilast),status='old') 
@@ -2771,7 +2834,498 @@ subroutine readv2bme_mfd(firstread,formattedfile,intcase)
   firstread= .false.
  
   return 
-end subroutine readv2bme_mfd 
+end subroutine readv2bme_mfd
+
+subroutine read_in_no2b_bin(firstread)
+  use nopdef
+  use noparticle
+  use system_parameters
+  use coupledmatrixelements
+  use sporbit
+  use io
+  use bmpi_mod
+  use nodeinfo
+  use iso_c_binding, only: c_double,c_float
+  use, intrinsic :: iso_fortran_env, only: iostat_end
+
+  implicit none
+  integer :: ios
+  logical :: firstread
+  integer :: i
+  integer :: n,l,j,tz
+  integer :: nump,numn
+  integer :: orbitindex,indx
+  integer :: c,d,a,b,Jab,na,nb,nc,niorba
+  integer :: ita,itb,itc,itd,it
+  integer :: la,lb,ja,jb
+  integer :: iorba,iorbb,iorbc,iorbd
+  integer :: obindex
+  real(c_float) obme
+  real fact
+  real(c_float) :: zb
+  real(c_float) :: h,v2b
+  integer phase
+  integer :: pair1,pair2
+  integer :: pcpar,pcref,pcstart
+  real(c_double) bar_omega
+  integer :: Emax, obme_number, tbme_number
+  logical, external :: k1k2_is_zero
+  integer :: ierr
+
+  if(auto_input)then
+     read(autoinputfile,*)hw,betacm
+  else
+     print*,' Enter oscillator frequency (in MeV) and center-of-mass strength '
+     read*,hw,betacm
+     write(autoinputfile,*)hw,betacm,'   ! hw,  beta for center of mass '
+  end if
+
+  read(1) bar_omega,Emax, orbit_number, obme_number, tbme_number
+  print*,bar_omega,Emax, orbit_number, obme_number, tbme_number
+  allocate(nosp(0:orbit_number-1))
+  do i=0,orbit_number-1
+     read(1) n,l,j,tz
+     nosp(i)%n=n
+     nosp(i)%l=l
+     nosp(i)%j=j
+     nosp(i)%it=(3+tz)/2
+     call find_orindex(n,l,j,(3+tz)/2,orbitindex)
+     nosp(i)%orbit=orbitindex
+  end do
+
+  read(1) no2b_zero_body
+  print*,'no2b_zero_body',no2b_zero_body
+  no2b_zero_body = -1.5 * betacm * hw + no2b_zero_body
+
+  nump=(numorb(1)+1)*numorb(1)/2
+  numn=(numorb(2)+1)*numorb(2)/2
+  allocate(noobmep(nump))
+  allocate(noobmen(numn))
+  fact = 1.0/(np(1)+np(2))
+
+  do iorba=1,numorb(1)
+    do iorbb=iorba,numorb(1)
+        obindex=(iorbb-1)*iorbb/2+iorba
+        noobmep(obindex)%cp=iorbb
+        noobmep(obindex)%dp=iorba
+    end do
+  end do
+
+  do iorba=1,numorb(2)
+    do iorbb=iorba,numorb(2)
+        obindex=(iorbb-1)*iorbb/2+iorba
+        noobmen(obindex)%cp=iorbb
+        noobmen(obindex)%dp=iorba
+    end do
+  end do
+
+  do d=0, orbit_number-1
+     do c=d, orbit_number-1
+        read(1) obme
+        h=0
+        ita=nosp(d)%it
+        itb=nosp(c)%it
+        la=nosp(d)%l
+        lb=nosp(c)%l
+        ja=nosp(d)%j
+        jb=nosp(c)%j
+        iorba=nosp(d)%orbit
+        iorbb=nosp(c)%orbit
+        if (iorba==-1 .or. iorbb==-1) then
+           print*,'maybe wrong in ob',d,c
+           cycle
+        end if
+        if (ita/=itb .or. la/=lb .or. ja/=jb) then
+           if (obme==0) cycle
+           print*,'wrong obme',c,d,obme
+        end if
+
+        na=nosp(d)%n
+        nb=nosp(c)%n
+        if (na==nb) then
+           h=betacm*fact*(2*na+la+1.5)*hw
+           obme=obme+h
+        end if
+        if (iorba>iorbb) then
+           obindex=(iorba-1)*iorba/2+iorbb
+           niorba=iorbb
+           iorbb=iorba
+           iorba=niorba
+        else
+           obindex=(iorbb-1)*iorbb/2+iorba
+        end if
+        if (ita==1) then
+           noobmep(obindex)%cp=iorbb
+           noobmep(obindex)%dp=iorba
+           noobmep(obindex)%obme=obme
+        else
+           noobmen(obindex)%cp=iorbb
+           noobmen(obindex)%dp=iorba
+           noobmen(obindex)%obme=obme
+        end if
+     end do
+  end do
+
+  do i=1,(numorb(1)+1)*numorb(1)/2
+    iorba=noobmep(i)%cp
+    iorbb=noobmep(i)%dp
+    if (iorba==iorbb) then
+        obme=noobmep(i)%obme
+        zb=no2b_zero_body*fact
+        obme=obme+zb
+        noobmep(i)%obme=obme
+    end if
+  end do
+
+  do i=1,(numorb(2)+1)*numorb(2)/2
+    iorba=noobmen(i)%cp
+    iorbb=noobmen(i)%dp
+    if (iorba==iorbb) then
+        obme=noobmen(i)%obme
+        zb=no2b_zero_body*fact
+        obme=obme+zb
+        noobmen(i)%obme=obme
+    end if
+  end do
+
+  print*,'NO1B END'
+  if(np(1)>1) call covertXtoXX(1)
+  if(np(2)>1) call covertXtoXX(2)
+  if(np(1)>0 .and. np(2)>0) then
+    call covertXtoXY(1)
+    call covertXtoXY(2)
+  end if
+
+  do i=1,tbme_number
+    read(1, iostat=ios) a,b,c,d,Jab,v2b
+    h=0.0
+    if(.not.k1k2_is_zero(a,b,c,d)) then
+        read(1, iostat=ios) h
+    end if
+
+    iorba=nosp(a)%orbit
+    iorbb=nosp(b)%orbit
+    iorbc=nosp(c)%orbit
+    iorbd=nosp(d)%orbit
+    ita=nosp(a)%it
+    itb=nosp(b)%it
+    itc=nosp(c)%it
+    itd=nosp(d)%it
+    if (iorba==-1.or.iorbb==-1.or.iorbc==-1.or.iorbd==-1) then
+        print*,'may be wrong iorb',iorba,iorbb,iorbc,iorbd
+        cycle
+    end if
+    phase=1
+    if ((ita/=itc .or. itb/=itd).and.(ita/=itd .or. itb/=itc)) then
+        print*, 'wrong itabcd',ita,itb,itc,itd
+        stop
+    end if
+    if (ita>itb.or.(iorba<iorbb.and.ita==itb)) then
+        na=b
+        b=a
+        a=na
+        phase=phase*(-1)**(Jab+1+((orbqn(ita,iorba)%j+orbqn(itb,iorbb)%j)/2))
+    end if
+    if (itc>itd.or.(iorbc<iorbd.and.itc==itd)) then
+        nc=d
+        d=c
+        c=nc
+        phase=phase*(-1)**(Jab+1+((orbqn(itc,iorbc)%j+orbqn(itd,iorbd)%j)/2))
+    end if
+    iorba=nosp(a)%orbit
+    iorbb=nosp(b)%orbit
+    iorbc=nosp(c)%orbit
+    iorbd=nosp(d)%orbit
+    if(iorba<iorbc .or. (iorba==iorbc .and. iorbb<iorbd)) then
+        na=c
+        nb=d
+        c=a
+        d=b
+        a=na
+        b=nb
+    end if
+    iorba=nosp(a)%orbit
+    iorbb=nosp(b)%orbit
+    iorbc=nosp(c)%orbit
+    iorbd=nosp(d)%orbit
+    ita=nosp(a)%it
+    itb=nosp(b)%it
+    itc=nosp(c)%it
+    itd=nosp(d)%it
+
+    if (ita==1 .and. itb==1) then
+        it=1
+        pair1 = iorba*(iorba-1)/2 + iorbb
+        pair2 = iorbc*(iorbc-1)/2 + iorbd
+        pair1 = PPcouplemap(pair1)
+        pair2 = PPcouplemap(pair2)
+        if(pair1 == -1 .or. pair2 == -1) cycle
+        pcpar = XXcouples(it)%pairc(pair1)%par
+        pcref = XXcouples(it)%meref(pcpar)
+        pcstart = XXcouples(it)%mestart(pcpar)
+        if(pair1 >= pair2)then
+            indx = (pair1-pcref)*(pair1-pcref-1)/2+pair2-pcref+pcstart
+        else
+            indx = (pair2-pcref)*(pair2-pcref-1)/2+pair1-pcref+pcstart
+        end if
+        if(Jab > ppme(indx)%jmax .or. Jab < ppme(indx)%jmin)then
+            print*,' error in Js (pp) ',pair1,pair2,indx
+            print*,' orbits ',a,b,c,d
+            print*,iorba,iorbb,iorbc,iorbd,Jab,v2b
+            print*,Jab,ppme(indx)%jmin,ppme(indx)%jmax
+            print*,' STOPPING RUN '
+#ifdef _MPI
+            call BMPI_Abort(MPI_COMM_WORLD,101,ierr)
+#endif
+            stop
+        end if
+        ppme(indx)%v(Jab)=ppme(indx)%v(Jab)+(v2b+betacm*h)*phase
+    else if (ita==1 .and. itb==2) then
+        pair1 = numorb(2)*(iorba-1) + iorbb
+        pair2 = numorb(2)*(iorbc-1) + iorbd
+        pair1 = PNcouplemap(pair1)
+        pair2 = PNcouplemap(pair2)
+        if(pair1 == -1 .or. pair2 == -1) cycle
+        pcpar = PNcouples%pairc(pair1)%par
+        pcref = PNcouples%meref(pcpar)
+        pcstart = PNcouples%mestart(pcpar)
+        if(pair1 >= pair2)then
+            indx = (pair1-pcref)*(pair1-pcref-1)/2+pair2-pcref+pcstart
+        else
+            indx = (pair2-pcref)*(pair2-pcref-1)/2+pair1-pcref+pcstart
+        end if
+        if(Jab > pnme(indx)%jmax .or. Jab < pnme(indx)%jmin)then
+            print*,' error in Js (pn) ',pair1,pair2,indx
+            print*,' orbits ',a,b,c,d
+            print*,iorba,iorbb,iorbc,iorbd,Jab,v2b
+            print*,Jab,pnme(indx)%jmin,pnme(indx)%jmax
+            print*,' STOPPING RUN '
+#ifdef _MPI
+            call BMPI_Abort(MPI_COMM_WORLD,101,ierr)
+#endif
+            stop
+        end if
+        pnme(indx)%v(Jab)=pnme(indx)%v(Jab)+(v2b+betacm*h)*phase
+    else if (ita==2 .and. itb==2) then
+        it=2
+        pair1 = iorba*(iorba-1)/2 + iorbb
+        pair2 = iorbc*(iorbc-1)/2 + iorbd
+        pair1 = NNcouplemap(pair1)
+        pair2 = NNcouplemap(pair2)
+        if(pair1 == -1 .or. pair2 == -1) cycle
+        pcpar = XXcouples(it)%pairc(pair1)%par
+        pcref = XXcouples(it)%meref(pcpar)
+        pcstart = XXcouples(it)%mestart(pcpar)
+        if(pair1 >= pair2)then
+            indx = (pair1-pcref)*(pair1-pcref-1)/2+pair2-pcref+pcstart
+        else
+            indx = (pair2-pcref)*(pair2-pcref-1)/2+pair1-pcref+pcstart
+        end if
+        if(Jab > nnme(indx)%jmax .or. Jab < nnme(indx)%jmin)then
+            print*,' error in Js (nn) ',pair1,pair2,indx
+            print*,' orbits ',a,b,c,d
+            print*,iorba,iorbb,iorbc,iorbd,Jab,v2b
+            print*,Jab,nnme(indx)%jmin,nnme(indx)%jmax
+            print*,' STOPPING RUN '
+#ifdef _MPI
+            call BMPI_Abort(MPI_COMM_WORLD,101,ierr)
+#endif
+            stop
+        end if
+        nnme(indx)%v(Jab)=nnme(indx)%v(Jab)+(v2b+betacm*h)*phase
+    else
+        print*,'there may be something wrong with order'
+        print*,' orbits ',a,b,c,d
+        print*,iorba,iorbb,iorbc,iorbd,Jab,v2b
+        print*,ita,itb,itc,itd
+    end if
+  end do
+
+  if (ios == iostat_end) then
+     print*,'read file to the end'
+  else
+     print*,'not the end of file'
+  end if
+  do while (ios /= iostat_end)
+      read(1,iostat=ios) v2b
+      print*,v2b
+  end do
+  close(1)
+  firstread= .false.
+  return
+end subroutine read_in_no2b_bin
+
+subroutine find_orindex(n,l,j,it,orbitindex)
+  use sporbit
+  implicit none
+  integer :: n,l,j,it
+  integer :: orbitindex,iorb
+  orbitindex=-1
+  do iorb=1,numorb(it)
+    if (orbqn(it,iorb)%nr==n .and. orbqn(it,iorb)%j==j .and. orbqn(it,iorb)%l==l) then
+        orbitindex=iorb
+        exit
+    end if
+  end do
+end subroutine find_orindex
+
+subroutine covertXtoXX(it)
+  use nopdef
+  use noparticle
+  use sporbit
+  use system_parameters
+  use coupledmatrixelements
+
+  implicit none
+  integer it
+  type (obmej),pointer :: vX(:)
+  type (vjs),pointer :: vXX(:)
+  integer :: ix,inde1,indx
+  integer :: a,b
+  real :: fact1
+  real :: obme
+  integer :: pair1,pair2
+  integer :: phase,exch1,exch2
+  integer :: pcpar,pcref,pcstart
+  integer,pointer :: XXcouple(:)
+  integer :: Jab
+  real :: hfactor
+
+  fact1=1.0/(np(1)+np(2)-1.0)
+  if (it==1) then
+    vX=>noobmep
+    vXX=>ppme
+    XXcouple=>PPcouplemap
+  else
+    vX=>noobmen
+    vXX=>nnme
+    XXcouple=>NNcouplemap
+  end if
+
+  do inde1=1,(numorb(it)+1)*numorb(it)/2
+    a=vX(inde1)%cp
+    b=vX(inde1)%dp
+    obme=vX(inde1)%obme
+    if (obme==0) cycle
+    do ix=1,numorb(it)
+        hfactor=1.0
+        if( a==ix) hfactor=hfactor*sqrt(2.0)
+        if( b==ix) hfactor=hfactor*sqrt(2.0)
+        exch1=0
+        exch2=0
+        if (ix>a) then
+            exch1=1
+            pair1=ix*(ix-1)/2+a
+        else
+            pair1=a*(a-1)/2+ix
+        end if
+        if (ix>b) then
+            exch2=1
+            pair2=ix*(ix-1)/2+b
+        else
+            pair2=b*(b-1)/2+ix
+        end if
+        if (pair1 < 1 .or. pair1 > size(XXcouple)) stop 'pair1 OOB'
+        if (pair2 < 1 .or. pair2 > size(XXcouple)) stop 'pair2 OOB'
+        pair1 = XXcouple(pair1)
+        pair2 = XXcouple(pair2)
+        if(pair1 == -1 .or. pair2 == -1) cycle
+        pcpar = XXcouples(it)%pairc(pair1)%par
+        pcref = XXcouples(it)%meref(pcpar)
+        pcstart = XXcouples(it)%mestart(pcpar)
+        if(pair1 >= pair2)then
+            indx = (pair1-pcref)*(pair1-pcref-1)/2+pair2-pcref+pcstart
+        else
+            indx = (pair2-pcref)*(pair2-pcref-1)/2+pair1-pcref+pcstart
+        end if
+        do Jab=vXX(indx)%jmin,vXX(indx)%jmax
+            phase=1
+            if (modulo(Jab,2)/=0 .and. hfactor>1.1) cycle
+            if (exch1==1) then
+               phase=phase*(-1)**(Jab+1+((orbqn(it,a)%j+orbqn(it,ix)%j)/2))
+            end if
+            if (exch2==1) then
+               phase=phase*(-1)**(Jab+1+((orbqn(it,b)%j+orbqn(it,ix)%j)/2))
+            end if
+            vXX(indx)%v(Jab)=vXX(indx)%v(Jab)+obme*phase*fact1*hfactor
+        end do
+    end do
+  end do
+end subroutine covertXtoXX
+
+subroutine covertXtoXY(it)
+  use nopdef
+  use noparticle
+  use sporbit
+  use system_parameters
+  use coupledmatrixelements
+
+  implicit none
+  integer :: it,itc
+  type (obmej),pointer :: vX(:)
+  integer :: ix,inde1,indx
+  integer :: a,b
+  real :: fact1
+  real :: obme
+  integer :: pair1,pair2
+  integer :: pcpar,pcref,pcstart
+  integer :: Jab
+
+  fact1=1.0/(np(1)+np(2)-1.0)
+  itc=3-it
+  if (it==1) then
+    vX=>noobmep
+  else
+    vX=>noobmen
+  end if
+  do inde1=1,(numorb(it)+1)*numorb(it)/2
+    a=vX(inde1)%cp
+    b=vX(inde1)%dp
+    obme=vX(inde1)%obme
+    if (obme==0) cycle
+    do ix=1,numorb(itc)
+        if (it==1) then
+            pair1=numorb(2)*(a-1)+ix
+            pair2=numorb(2)*(b-1)+ix
+        else
+            pair1=numorb(2)*(ix-1)+a
+            pair2=numorb(2)*(ix-1)+b
+        end if
+        pair1 = PNcouplemap(pair1)
+        pair2 = PNcouplemap(pair2)
+        if(pair1 == -1 .or. pair2 == -1) cycle
+        pcpar = PNcouples%pairc(pair1)%par
+        pcref = PNcouples%meref(pcpar)
+        pcstart = PNcouples%mestart(pcpar)
+        if(pair1 >= pair2)then
+            indx = (pair1-pcref)*(pair1-pcref-1)/2+pair2-pcref+pcstart
+        else
+            indx = (pair2-pcref)*(pair2-pcref-1)/2+pair1-pcref+pcstart
+        end if
+        do Jab=pnme(indx)%jmin,pnme(indx)%jmax
+            pnme(indx)%v(Jab)=pnme(indx)%v(Jab)+obme*fact1
+        end do
+    end do
+  end do
+end subroutine covertXtoXY
+
+logical function k1k2_is_zero(a,b,c,d)
+  use nopdef
+  use noparticle
+  implicit none
+  integer :: a,b,c,d
+  integer :: w12,w34
+  integer deltaw
+
+  w12=2*nosp(a)%n+nosp(a)%l+2*nosp(b)%n+nosp(b)%l
+  w34=2*nosp(c)%n+nosp(c)%l+2*nosp(d)%n+nosp(d)%l
+  deltaw=w12-w34
+  if (deltaw==-2 .or. deltaw==0 .or. deltaw==2) then
+    k1k2_is_zero=.false.
+  else
+    k1k2_is_zero=.true.
+  end if
+end function k1k2_is_zero
  
 !============================================================ 
 !
@@ -4678,5 +5232,3 @@ subroutine readinsppot(formatchar,filenumber,spscalep,spscalen,isformatted,found
 end subroutine readinsppot
 
 !====================================
-
-
