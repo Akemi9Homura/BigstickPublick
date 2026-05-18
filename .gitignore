@@ -1,0 +1,23 @@
+# Build products
+/bin/
+/make/*.o
+/make/*.mod
+
+# Local test/run directories
+/test/
+/runs/
+
+# BIGSTICK runtime outputs
+*.bigstick
+*.res
+*.dres
+*.occres
+*.wfn
+*.lcoef
+*.log
+fort.*
+
+# Scratch/editor files
+*.tmp
+*.bak
+*~
