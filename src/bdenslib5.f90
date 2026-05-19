@@ -463,14 +463,15 @@ do Jab = Jabmin,Jabmax
 				  x2bden(indx)%v(Jcd,Jab,Jtot)= -999.
 				  cycle
 			  end if
-			  x2bden(indx)%v(Jcd,Jab,Jtot)=x2bden(indx)%v(Jcd,Jab,Jtot) + & 
-			  vtmp * & 
-                    cleb(jk,mk,jl,ml,2*jcd,2*m)*cleb(ji,mi,jj,mj,2*jab,2*m)*cleb(2*jcd,-2*m,2*jab,2*m,2*Jtot,0)  & 
+			  x2bden(indx)%v(Jcd,Jab,Jtot)=x2bden(indx)%v(Jcd,Jab,Jtot) + &
+			  vtmp * &
+                    cleb(jk,mk,jl,ml,2*jcd,2*m)*cleb(ji,mi,jj,mj,2*jab,2*m)*cleb(2*jcd,-2*m,2*jab,2*m,2*Jtot,0)  &
 					* (-1)**(Jab -m)   & ! PHASE FROM time-reversal of second pair
+					* (-1)**(Jab + Jcd - Jtot)  & ! BUGFIX: compensate (-1)^{Jab+Jcd-Jtot} from CG m-reversal in HC's 3rd CG vs direct
 					* sqrt(JJf+1.0)*(-1)**(Jtot+ (JJf-JJi)/2)/ cleb4reduce &    ! reduce
 					/sqrt(2.0*Jtot+1.0)    ! needed for proper definition of density matrix
 
-          enddo      
+          enddo
 
     end do  ! Jcd
 end do   ! Jab
@@ -1165,11 +1166,14 @@ end subroutine setup_PNarrays
 						trfactor = 2   ! used to account for Time reversal  (ab,cd) = (cd,ab)
 					end if	
 !--- COMPUTE INDEX ........
+! BUGFIX: PN compute uses (destruction=pair1, creation=pair2) layout in couple_2bdensPN line 770.
+! Original print formula here had (creation=ab, destruction=cd) — transposed layout — causing PN Jab≠Jcd entries
+! to read transposed-entry data. Swap abcouple <-> cdcouple to match compute's (destruction, creation) keying.
 
-                    indx = (abcouple - PNcouples%meref(ipar) -1 )*parblocksize +  		 & 
-					       cdcouple - PNcouples%meref(ipar) + PNcouples%mestart(ipar)
-						   										
-!----- LOOP OVER Js					
+                    indx = (cdcouple - PNcouples%meref(ipar) -1 )*parblocksize +  		 &
+					       abcouple - PNcouples%meref(ipar) + PNcouples%mestart(ipar)
+
+!----- LOOP OVER Js
                     do Jab = pn2bden(indx)%Jabmin,pn2bden(indx)%Jabmax
 						
 	                    do Jcd = pn2bden(indx)%Jcdmin,pn2bden(indx)%Jcdmax
