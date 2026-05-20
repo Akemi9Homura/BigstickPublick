@@ -653,7 +653,7 @@ contains
            iref = XX2(it)%meref(m,par)
            istart = XX2(it)%mestart(m,par)
 		   
-!		   if(.not. dens2bflag)then   ! added in 7.9.1, removed in 7.10.4
+		   if(.not. dens2bflag)then   ! added in 7.9.1, removed in 7.10.4
               if(cpair <= dpair) then
                  itbme = istart + (dpair-iref)*(dpair-iref-1)/2+cpair-iref
               else
@@ -661,9 +661,9 @@ contains
               endif
 			  
 !			  print*,' ahhh ',itbme,cpair,dpair,iref,istart,isps,jsps,ksps,lsps
-!	  	   else
-!			   itbme = istart+XX2(it)%block(m,par)*(dpair-iref-1)+cpair-iref
-!		   end if
+              else
+                 itbme = istart+XX2(it)%block(m,par)*(dpair-iref-1)+cpair-iref
+              end if
 
            end if ! IF FILL
 !------------- CHECK IF TRIANGLE RULE IS SATISFIED---------------
@@ -1225,4 +1225,3 @@ contains
 !====================================================================
 
 end module welder
-

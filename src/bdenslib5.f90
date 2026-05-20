@@ -177,7 +177,13 @@ contains
         endif
  
 
-        do cpair = 1,dpair !npairXX(it)       ! loop over creation m-scheme pair  
+        if(dens2bflag)then
+          pairblocksize = XX2(it)%block(m,par)
+        else
+          pairblocksize = dpair-iref
+        endif
+
+        do cpair = 1,npairXX(it)       ! loop over creation m-scheme pair
 
           if(XX2(it)%pair(cpair)%m /=m)cycle       ! enforce quantum numbers
           if(XX2(it)%pair(cpair)%par /= par)cycle
@@ -190,7 +196,12 @@ contains
 
 !--------------- HOW INDEX FOR UNCOUPLED (m-scheme) tbme IS COMPUTED---------
 !          itbme = istart + pairblocksize*(dpair-iref-1)+cpair-iref
-          itbme = istart + (dpair-iref)*(dpair-iref-1)/2+cpair-iref
+          if(dens2bflag)then
+            itbme = istart + pairblocksize*(dpair-iref-1)+cpair-iref
+          else
+            if(cpair > dpair)cycle
+            itbme = istart + (dpair-iref)*(dpair-iref-1)/2+cpair-iref
+          endif
 
           if(itbme > nmatXX(it))then          ! error trap
              print*,' me label too large'
@@ -387,6 +398,7 @@ end do   ! Jab
 !if(.not.zerome)print*,indx,x2bden(indx)%v(2,0,2), x2bden(1)%v(2,0,2)
 !................. NOW DO HERMITIAN CONJUGATE... ADDED 7.10.4.....
 
+          if(dens2bflag)cycle
           if(cpair==dpair)cycle
           if(dcouple <= XXcouples(it)%meref(2))then
 			coupleblocksize = XXcouples(it)%meref(2)

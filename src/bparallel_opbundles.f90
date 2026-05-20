@@ -333,8 +333,7 @@ subroutine count_create_draft_opbundles_g(draft,ifrag,ffrag,create,optype,hchar,
   do fs = fragmentlist(ffrag)%ssectorstart, fragmentlist(ffrag)%ssectorend   ! order switched in 7.6.1
      do is = fragmentlist(ifrag)%ssectorstart, fragmentlist(ifrag)%ssectorend
 
-!         if(is < fs .and. .not. dens2bflag)cycle   ! to prevent double counting; and this is the way
-          if(is < fs)cycle   ! to prevent double counting; and this is the way
+          if(is < fs .and. .not.(dens2bflag .and. (optype=='PP0' .or. optype=='NN0')))cycle   ! to prevent double counting; and this is the way
                                                    ! sector jumps are organized
 												   ! modified 7.9.2 for two-body densities
 

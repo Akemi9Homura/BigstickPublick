@@ -131,6 +131,7 @@ subroutine applyhPPbundled_den (hchar,startbundle,endbundle )
   use nodeinfo
   use localvectors
   use system_parameters
+  use coupledmatrixelements, only: dens2bflag
   use jumpNbody
   use precisions
   use interaction
@@ -249,6 +250,8 @@ do ibundle = startbundle,endbundle
 !$omp end parallel
 
   case ('b')  
+
+  if(dens2bflag)cycle
   
 !--------- OUTER LOOP OVER CONJUGATE NEUTRON SDs---------
 !          this makes for simple OpenMP threading
@@ -258,7 +261,7 @@ do ibundle = startbundle,endbundle
 !$omp          firstprivate(cstride, ncstates, xjmpstart,xjmpend)  &
 !$omp          shared(vecin, vecout)  &
 !$omp          shared(vec2threadchunkm1) &
-!$omp          shared(p2b_op, p2b_1sd, p2b_2sd, p2b_phase), reduction(+:dmatpphc)
+!$omp          shared(p2b_op, p2b_1sd, p2b_2sd, p2b_phase), reduction(+:dmatpp,dmatpphc)
 
   num_threads =  omp_get_num_threads()
   mythread = omp_get_thread_num()
@@ -286,7 +289,11 @@ do ibundle = startbundle,endbundle
           statei = p2b_1sd(xjmp)+ nsd !csd_index
           statef = p2b_2sd(xjmp)+nsd !csd_index
 		  xme =vecout(statef)*vecin(statei)*p2b_phase(xjmp)
-		  dmatpphc(Xoplabel)=dmatpphc(Xoplabel)+xme
+		  if(dens2bflag)then
+		     dmatpp(Xoplabel)=dmatpp(Xoplabel)+xme
+		  else
+		     dmatpphc(Xoplabel)=dmatpphc(Xoplabel)+xme
+		  endif
 
       end do  ! xjmp
    end do  ! csd
@@ -327,6 +334,7 @@ subroutine applyhNNbundled_den (hchar,startbundle,endbundle )
    use localvectors
    use nodeinfo
    use system_parameters
+   use coupledmatrixelements, only: dens2bflag
    use jumpNbody
    use precisions
    use interaction
@@ -449,12 +457,15 @@ case ('f')
 !$omp end parallel
 
 case ('b')
+
+if(dens2bflag)cycle
+
 !$omp parallel private(vs, xjmp, Xoplabel, xme, num_threads, mythread,psd)         &
 !$omp          private(istart, iend, chunk, csd, csd_index, statef,statei)  &
 !$omp          firstprivate(cstride, ncstates, xjmpstart, xjmpend)  &
 !$omp          shared(vecin, vecout)  &
 !$omp          shared(vec2threadchunkm1) &
-!$omp          shared(n2b_op, n2b_1sd, n2b_2sd, n2b_phase), reduction(+:dmatnnhc)
+!$omp          shared(n2b_op, n2b_1sd, n2b_2sd, n2b_phase), reduction(+:dmatnn,dmatnnhc)
          num_threads =  omp_get_num_threads()
          mythread = omp_get_thread_num()
 
@@ -479,8 +490,12 @@ case ('b')
 !---------- GET INITIAL, FINAL SDs and place in basis..............
                         statei = n2b_1sd(xjmp)+psd ! csd_index
                         statef = n2b_2sd(xjmp)+psd  !csd_index
-			  		  xme =vecout(statef)*vecin(statei)*n2b_phase(xjmp)
-			  		  dmatnnhc(Xoplabel)=dmatnnhc(Xoplabel)+xme	
+                        xme =vecout(statef)*vecin(statei)*n2b_phase(xjmp)
+                        if(dens2bflag)then
+                           dmatnn(Xoplabel)=dmatnn(Xoplabel)+xme
+                        else
+                           dmatnnhc(Xoplabel)=dmatnnhc(Xoplabel)+xme
+                        endif
 !					  if(Xoplabel==2)print*,' b ',statei,statef,xme	,ibundle	  
 					  				  
                      end do  ! xjmp

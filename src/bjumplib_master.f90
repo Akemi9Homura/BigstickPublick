@@ -783,7 +783,7 @@ subroutine master2bodyjumps(it,fill)
   use welder
   use chains
   use io
-!  use coupledmatrixelements,only:dens2bflag
+  use coupledmatrixelements,only:dens2bflag
   use spstate
   use marriage
   
@@ -1114,8 +1114,7 @@ integer :: ithread
 
 !   MODIFIED IN 7.9.1 to try to get all possible orderings
      curgen=>geneology
-!     call matchmaker2(it,nbody,is,descent%sector(is),nbody,fs,descent%sector(fs),.not.dens2bflag,curgen, ngeneologies)
-     call matchmaker2(it,nbody,is,descent%sector(is),nbody,fs,descent%sector(fs),.true.,curgen, ngeneologies)
+     call matchmaker2(it,nbody,is,descent%sector(is),nbody,fs,descent%sector(fs),.not.dens2bflag,curgen, ngeneologies)
 	 
      if ( ngeneologies == 0 ) cycle
 	 
@@ -1126,8 +1125,7 @@ integer :: ithread
      do igen = 1,ngeneologies
         call chaingang(it,nbody*2,curgen,optype)   ! advances curgen
 		!.... MODIFIED in 7.9.1 to allow for two-body densities, which break hermiticity
-!        call weld(it,is,fs,nbody,isjmp,.not.dens2bflag, fill , x2bjump(it)%sjmp(isjmp),startjump,endjump,shiftjump,njumps)
-        call weld(it,is,fs,nbody,isjmp,.true., fill , x2bjump(it)%sjmp(isjmp),startjump,endjump,shiftjump,njumps)
+        call weld(it,is,fs,nbody,isjmp,.not.dens2bflag, fill , x2bjump(it)%sjmp(isjmp),startjump,endjump,shiftjump,njumps)
 		
 !		write(31,*)igen,njumps
 
@@ -1487,7 +1485,7 @@ end subroutine set2bsectorjumps
    use jumpdef
    use sectors
    use bsector_mod
-!   use coupledmatrixelements,only:dens2bflag
+   use coupledmatrixelements,only:dens2bflag
    
    implicit none
    integer :: it
@@ -1523,8 +1521,7 @@ end subroutine set2bsectorjumps
        ics = xNjumps(itc)%isector(csjmp)       ! trial initial conjugate sector         
        fcs = xNjumps(itc)%fsector(csjmp)       ! trial initial final sector
 
-!       if(ixs == fxs .and. fcs > ics .and. .not.dens2bflag) cycle   ! ENFORCEMENT OF HERMITICITY
-       if(ixs == fxs .and. fcs > ics ) cycle   ! ENFORCEMENT OF HERMITICITY
+       if(ixs == fxs .and. fcs > ics .and. .not.dens2bflag) cycle   ! ENFORCEMENT OF HERMITICITY
 
 !........ NOW CHECK TO SEE IF ics CAN BE A CONJUGATE SECTOR TO ixs 
 !         AND IF fcs CAN BE A CONJUGATE SECTOR TO fxs
