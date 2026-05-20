@@ -32,14 +32,11 @@
   - A single-thread rerun with `OMP_NUM_THREADS=1` made pp, nn, and pn all agree with KSHELL at roughly `1e-7` to `1e-5`.
   - Confirmed cause: in `src/bdenslib4.f90`, the PN backward branch had an OpenMP reduction on `dmatpnhc` while the loop body updates `dmatpn`. This created a data race for threaded runs.
   - Source fix retained per user request: the PN backward branch now uses `reduction(+:dmatpn)`.
-- Transition density comparison:
-  - Transition OBTD agrees.
-  - Full transition TBTD still disagrees even in the single-thread BIGSTICK rerun.
-  - The remaining mismatch is concentrated in full transition TBTD elements with non-scalar rank, `Jab != Jcd`, and/or off-diagonal pair blocks.
-  - Direct scalar diagonal-style entries are consistent once the OpenMP PN race is removed.
-  - Current suspect area is `src/bdenslib5.f90`, especially `couple_2bdensXX` and `couple_2bdensPN` handling of direct versus Hermitian-conjugate blocks, exchanged pair ordering, and associated phases for full transition TBTD.
-  - The exact line-level fix for transition TBTD has not been confirmed yet.
-  - Trial restores of the old full non-Hermitian XX indexing / density jump-folding code paths were tested and rejected because they broke already-correct rank-0 and `Jab == Jcd` diagonal checks.
+- Historical transition-density issue:
+  - Before the retained full-density indexing changes, transition OBTD agreed but full transition TBTD disagreed.
+  - The mismatch was concentrated in full transition TBTD elements with non-scalar rank, `Jab != Jcd`, and/or off-diagonal pair blocks.
+  - Direct scalar diagonal-style entries were already consistent once the OpenMP PN race was removed.
+  - With the current retained fixes, Mg24/USDB full TBTD agrees with KSHELL at about `8.1e-06` max absolute difference when the correct `M` projection is used and invalid `-999` placeholder values are excluded.
 
 ## M-projection handling for BIGSTICK density benchmarks
 
@@ -54,66 +51,85 @@
   - Run BIGSTICK with `2Jz=0` for states involving `J=0`.
   - Run BIGSTICK again with `2Jz=2` for nonzero-`J` states and use that run as a complete rerun for those states.
   - Match states between `2Jz=0`, `2Jz=2`, and KSHELL by energy and angular momentum, not by raw state index.
-  - Do not compare or treat `-999`, `-499.5000171`, `-706.3996865`, or other scaled sentinel values as physical densities.
+  - Do not compare or treat `-999`, `-499.5000171`, `-706.3996865`, or other scaled `-999` placeholder/invalid values as physical densities.
   - Do not merge `2Jz=2` entries into the old `2Jz=0` output for benchmarking; compare the appropriate complete run directly.
 - Important interpretation:
   - A properly reduced density matrix element should be independent of the chosen `M` projection, as long as the left/right vectors are the same physical states, the CG coefficient used for reduction is nonzero, and the phase/reduced-matrix-element convention is consistent.
-  - Therefore, after reduction, `2Jz=0` and `2Jz=2` BIGSTICK outputs should agree on all common non-sentinel entries for the same physical `2+` states.
+  - Therefore, after reduction, `2Jz=0` and `2Jz=2` BIGSTICK outputs should agree on all common non-`-999` entries for the same physical `2+` states.
   - The observed `M0/M1` agreement for diagonal rank-0 entries but disagreement for common nonzero-rank entries is evidence of a non-scalar TBTD reduction/coupling/convention problem, not a physical `M` dependence.
-  - CG zeros explain missing/sentinel entries only; they do not explain nonzero common entries that differ between `M` runs or disagree with KSHELL.
+  - CG zeros explain missing/invalid `-999` placeholder entries only; they do not explain nonzero common entries that differ between `M` runs or disagree with KSHELL.
 - For Mg24/USDB:
   - `0+ -> 2+` with rank 2 is safe in `M=0` because the relevant `(0 2 2; 0 0 0)` 3j coefficient is nonzero.
   - `2+ -> 2+` with odd tensor rank fails in `M=0` because `(2 K 2; 0 0 0)` vanishes for odd `K`; use the `2Jz=2` run for these entries.
-  - However, the same-state nonzero-rank TBTD mismatch is not solved just by changing `M`: a `2Jz=2` rerun fills the missing odd-rank entries but those entries still disagree with KSHELL.
+  - With the current retained full-density fixes, the `2Jz=2` rerun fills the missing nonzero-`J` entries and agrees with KSHELL within the current benchmark tolerance.
 
 ## Latest TBTD testing notes
 
-- The PN OpenMP reduction fix is retained in `src/bdenslib4.f90`.
-- For benchmark reproducibility, BIGSTICK density runs are still being made with `OMP_NUM_THREADS=1` unless threaded behavior is the thing being tested.
-- New benchmark runs stored under `runs/mg24_usdb_density_compare`:
-  - `input.bigstick_mg24_usdb_m0_3` and `mg24_usdb_m0.*`: `2Jz=0`, lowest three states.
-  - `input.bigstick_mg24_usdb_m1_2` and `mg24_usdb_m1.*`: `2Jz=2`, lowest two states.
-  - `input.bigstick_mg24_usdb_m0_3_2full` and `mg24_usdb_m0_3_2full.den2b`: full TBTD for the three `2Jz=0` states.
-  - `input.bigstick_mg24_usdb_m1_2_2full` and `mg24_usdb_m1_2_2full.den2b`: full TBTD for the two `2Jz=2` states.
-- Energy matching:
+- Retained source fixes/changes:
+  - `src/bdenslib4.f90`: PN backward density branch uses `reduction(+:dmatpn)`, fixing the threaded PN data race.
+  - `src/bdenslib4.f90`, `src/bdenslib5.f90`, `src/bjumplib_master.f90`, `src/bjumplib_weld.f90`, and `src/bparallel_opbundles.f90`: current full-density code keeps the `dens2bflag` full non-Hermitian same-species density path rather than folding everything through the triangular Hermitian-conjugate indexing.
+  - Commit `5670a1c` records this as a tentative fix; keep judging correctness only by direct agreement with KSHELL or another independent reference, not by whether a difference merely gets smaller.
+
+### Mg24/USDB after the retained fix
+
+- KSHELL reference was the existing `/home/mengziyan/kshell/run_mg24_usdb_density_compare/log_Mg24_usdb_all_density.txt`.
+- BIGSTICK energy matching:
   - `2Jz=0`: state 1 `0+` at `-87.10445`, state 2 `2+` at `-85.60215`, state 3 `2+` at `-82.98830`.
   - `2Jz=2`: state 1 `2+` at `-85.60215`, state 2 `2+` at `-82.98830`; the `0+` state is absent, as expected.
-- Comparison scripts added:
-  - `runs/mg24_usdb_density_compare/compare_tbtd_mproj.py` maps and merges `2Jz=0`/`2Jz=2`; this was useful diagnostically but should not be used as the final benchmark procedure.
-  - `runs/mg24_usdb_density_compare/compare_tbtd_m1_only.py` compares only the complete `2Jz=2` BIGSTICK rerun for the two `2+` states against KSHELL, mapping BIGSTICK states `{1: 2, 2: 3}`.
-- Preferred current benchmark comparison for the two `2+` states:
-  - Use `python3 compare_tbtd_m1_only.py`.
-  - `2Jz=2` BIGSTICK entries after state mapping: `12824`, skipped sentinels: `0`.
-  - Common entries with KSHELL: `9864`.
-  - diagonal rank-0 remains good: `n=520`, max difference about `5.6e-6`.
-  - diagonal rank>0 still disagrees: max difference about `0.3182`.
-  - transition TBTD between the two `2+` states still disagrees: max difference about `0.6097`.
-- Diagnostic combined BIGSTICK-vs-KSHELL TBTD result from `compare_tbtd_mproj.py`:
-  - `2Jz=0` entries: `10892`, skipped sentinels: `5252`.
-  - mapped `2Jz=2` entries: `12824`, skipped sentinels: `0`, filled into combined set: `5636`.
-  - combined common entries with KSHELL: `12720`.
-  - diagonal rank-0 remains good: `n=780`, max difference about `5.5e-6`.
-  - filled odd-rank diagonal entries still disagree: max difference about `0.2507`.
-  - overall same-state nonzero-rank TBTD still disagrees: max difference about `0.2614`.
-  - transition TBTD still disagrees: max difference about `0.2575`.
-  - This combined result is not the benchmark procedure; it is only evidence that the `M=0` sentinels are not the remaining mismatch.
-- Interpretation of the new benchmark:
-  - `M=0` CG zeros explain the sentinel values only.
-  - They do not explain the remaining nonzero-rank TBTD mismatch.
-  - The next debugging target remains BIGSTICK's coupling from raw `dmatpp/dmatnn/dmatpn` to reduced nonzero-rank TBTD, especially `src/bdenslib5.f90`.
-- Experimental changes tested and reverted:
-  - Restoring `dens2bflag` branches in `src/bigstick_main.f90`, `src/bjumplib_master.f90`, and `src/bparallel_opbundles.f90`.
-  - Switching same-species density jumps/coupling in `src/bjumplib_weld.f90` and `src/bdenslib5.f90` from triangular Hermitian-style indexing to full non-Hermitian block indexing.
-  - Disabling Hermitian-conjugate XX coupling in `src/bdenslib5.f90`.
-  - These variants either doubled/broke rank-0 diagonal entries or damaged entries that already agreed with KSHELL, so they were not kept.
-- Remaining known problem:
-  - Full TBTD with nonzero tensor rank and especially `Jab != Jcd` still disagrees with KSHELL.
-  - PN off-diagonal coupled blocks still show large differences; transition TBTD still has large differences.
-- Next steps:
-  - Compare BIGSTICK and KSHELL at the uncoupled m-scheme density level for a small set of failing keys before changing more source.
-  - Start with representative same-state failures such as `(state 2 -> 2, a b Jab c d Jcd rank) = (2 2 2 2 2 3 3 2)` and PN failures such as `(3 5 2 2 5 3 2)`.
-  - Trace those keys through `src/bdenslib4.f90` raw `dmatpp/dmatnn/dmatpn` accumulation and `src/bdenslib5.f90` coupling, then compare against KSHELL `operator_mscheme.f90:get_cpld_tbtd`.
-  - Do not re-enable broad `dens2bflag` jump/opbundle branches unless the uncoupled comparison shows missing raw density blocks rather than a coupling/phase convention problem.
+- Preferred comparison script:
+  - `runs/mg24_usdb_density_compare/my_independent_compare.py`
+  - Route state pairs involving `0+` through the complete `2Jz=0` run.
+  - Route `2+ <-> 2+` pairs through the complete `2Jz=2` run.
+  - Do not merge individual `2Jz=2` entries into the old `2Jz=0` output; choose the complete run appropriate to the state pair.
+- Current comparison result:
+  - BIGSTICK routed entries: `2Jz=0` used `3704`, invalid `-999` placeholders skipped `0`; `2Jz=2` used `12824`, invalid `-999` placeholders skipped `0`.
+  - Common BIGSTICK/KSHELL entries: `16528`.
+  - Max absolute difference: about `8.1e-06`.
+  - Mean absolute difference: about `3.84e-07`.
+- Threaded check:
+  - `OMP_NUM_THREADS=4` BIGSTICK rerun files: `mg24_usdb_m0_3_2full_omp4.den2b`, `mg24_usdb_m1_2_2full_omp4.den2b`.
+  - `OMP_NUM_THREADS=4` and `OMP_NUM_THREADS=1` density outputs matched exactly for the compared entries.
+  - `OMP_NUM_THREADS=4` versus KSHELL still has max absolute difference about `8.1e-06`.
+
+### Mg24/IMSRG five-state threaded check
+
+- Interaction:
+  - IMSRG source `.snt`: `/home/mengziyan/shell-model-obs/temp/EM1.8_2.0_sd-shell_o18_hw16_emax4_e3max4.snt`.
+  - KSHELL run copy: `/home/mengziyan/kshell/run_mg24_imsrg/H.snt`.
+  - SHA256 matched for the two files: `68da04899df3915978ed8def8f79a1cc1f885fd02fb96d2b036c67e58aec7429`.
+- KSHELL reference:
+  - Run directory: `/home/mengziyan/kshell/run_mg24_imsrg`.
+  - Spectrum log: `log_Mg24_m0_5states.txt`.
+  - Density log: `log_Mg24_density_5states.txt`.
+  - KSHELL transit log prints `*** called mup ***`, so KSHELL filled missing `M=0` reduction cases internally.
+- BIGSTICK threaded runs stored under `runs/mg24_imsrg`:
+  - `input.bigstick_mg24_m0_5_omp4` -> `mg24_imsrg_m0_5_omp4.*`, `2Jz=0`, `OMP_NUM_THREADS=4`.
+  - `input.bigstick_mg24_m0_5_2full_omp4` -> `mg24_imsrg_m0_5_2full_omp4.den2b`.
+  - `input.bigstick_mg24_m1_5_omp4` -> `mg24_imsrg_m1_5_omp4.*`, `2Jz=2`, `OMP_NUM_THREADS=4`.
+  - `input.bigstick_mg24_m1_5_2full_omp4` -> `mg24_imsrg_m1_5_2full_omp4.den2b`.
+- BIGSTICK/KSHELL energy matching:
+  - `2Jz=0`: state 1 `0+` at `-74.32028`, state 2 `2+` at `-72.48098`, state 3 `2+` at `-69.63942`, state 4 `4+` at `-68.84279`, state 5 `3+` at `-68.33667`.
+  - `2Jz=2`: state 1 `2+` at `-72.48098`, state 2 `2+` at `-69.63942`, state 3 `4+` at `-68.84279`, state 4 `3+` at `-68.33667`, state 5 `4+` at `-66.88278`.
+- Projection choice for this five-state benchmark:
+  - Use the `2Jz=0` BIGSTICK file only for state pairs involving the `0+` state.
+  - Use the `2Jz=2` BIGSTICK file for all nonzero-`J` pairs among `2+`, `2+`, `4+`, and `3+`.
+  - A CG check showed that `M=1` has no reduction CG zeros for the allowed ranks among `J=2,2,4,3`; `M=0` has many zeros for those nonzero-`J` pairs.
+  - The complete `2Jz=0` full TBTD file still contains global `-999`/scaled `-999` invalid placeholders, but none are used in the routed comparison; the `2Jz=2` routed entries also contain none.
+- Comparison script:
+  - `runs/mg24_imsrg/compare_tbtd_imsrg_5_omp4.py`
+  - It canonicalizes same-species pair ordering, routes `M=0`/`M=1` by state pair, and enumerates Lanczos eigenvector phase signs before comparing.
+- Current comparison result:
+  - Routed invalid `-999` placeholders skipped: `0` for `M=0`, `0` for `M=1`.
+  - Common BIGSTICK/KSHELL entries: `63042`.
+  - Max absolute difference: `1.54e-05`.
+  - Mean absolute difference: `2.84e-07`.
+  - KSHELL-only entries: `14`; largest absolute KSHELL-only value about `9.2e-06`.
+
+## Current interpretation
+
+- The retained density changes make Mg24/USDB and Mg24/IMSRG full TBTD agree with KSHELL at about `1e-5` absolute precision when the correct `M` projection is used and `-999` placeholder values are excluded.
+- `-999` and scaled `-999` values are invalid placeholders caused by vanishing reduction CG coefficients. They are not physical densities and must not be included in comparisons.
+- Use complete reruns at the appropriate `M` projection and match physical states by energy and angular momentum. Do not judge an edit by whether it merely reduces a discrepancy; judge it by direct agreement with KSHELL or another independent reference.
 
 ## Verification
 

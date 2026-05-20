@@ -1,6 +1,6 @@
 # BIGSTICK (Public branch)
 
-大规模壳模型对角化代码（Fortran），Calvin W. Johnson 等。本仓库当前重点工作是排查 BIGSTICK 的两体跃迁密度 (TBTD) 与 KSHELL 输出在某些耦合分支上的不一致。
+大规模壳模型对角化代码（Fortran），Calvin W. Johnson 等。当前 TBTD 实现已通过 BIG↔KSHELL per-entry 验证（Mg24/USDB, Mg24/IMSRG, Na21/USDB, 精度 ~1e-5）；commit 5670a1c 的 "full non-Hermitian same-species density path" 修复为关键。
 
 ## 目录结构
 
@@ -28,5 +28,11 @@ Mg24/USDB 三个最低态 (0+, 2+, 2+) 与 KSHELL 完整比对（OBTD + TBTD）�
 - TBTD bug 机制分析（XX HC 分支 K-奇问题）→ @.claude/bug_localization.md
 - KSHELL 自动 m-up 机制 → @.claude/kshell_mup.md
 - BIGSTICK -999 哨兵与 M 选择规则 → @.claude/bigstick_m_selection.md
+- KSHELL `.snt+.ptn+.wav` 波函数解码规格（给 shell-model-obs 写 ground-truth reader 用） → @.claude/kshell_wf_format.md
+- BIGSTICK `.wfn+.bas` 波函数解码规格（用菜单 `'ba'` 生成 `.bas`，配 `.wfn` 二进制） → @.claude/bigstick_wf_format.md
+- ktransit (KSHELL 密度 × op) ≡ FCI (RDM × op) 等价性验证（Mg24/IMSRG + E2_2b） → @.claude/ktransit_fci_verification.md
+- IMSRG H + E2_2b 在 O18/Ne20/Mg24 上的 ground truth（能谱 + E2 reduced ME） → @.claude/imsrg_e2_ground_truth.md
+- KSHELL .snt → BIGSTICK .sps/.int 转换 + 用 BIGSTICK wf 直接夹 H 算能量（端到端通） → @.claude/bigstick_imsrg_pipeline.md
+- BIG ρ vs KSH ρ per-entry 比较（含 Mg24/USDB, Mg24/IMSRG, Na21/USDB 三核验证，commit 5670a1c 后 max ~1e-5） → @.claude/big_kshell_tbtd_hermiticity.md
 
 进度详见 `TODO.md`。
