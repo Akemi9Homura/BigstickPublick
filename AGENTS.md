@@ -1,5 +1,36 @@
 # Agent Notes
 
+## Task submission conventions for Li8 NO2B runs
+
+Use this convention when preparing or submitting BIGSTICK Li8 NCSM jobs with NO2B `.bin` interactions.
+
+- Place each run under:
+  - `runs/Li8/<force>_emax<emax>_e3max<e3max>/hw<hw>_Nmax<Nmax>_beta<beta>/`
+- Inside each run directory, use:
+  - `input/` for BIGSTICK input files and Slurm scripts
+  - `output/` as the working directory for the submitted BIGSTICK job
+- Do not put `auto12` or `no2b` in submitted input, output, or log file names unless the user explicitly asks for it. Those are input-method details, not part of the preferred naming convention.
+- Name BIGSTICK input files as:
+  - `input/Li8_<force>_emax<emax>_e3max<e3max>_hw<hw>_Nmax<Nmax>_beta<beta>_<nstates>states.in`
+- Use the same base name as the BIGSTICK output prefix, i.e. the second line of the `.in` file:
+  - `Li8_<force>_emax<emax>_e3max<e3max>_hw<hw>_Nmax<Nmax>_beta<beta>_<nstates>states`
+- BIGSTICK itself appends output suffixes such as `.res`, `.log`, `.wfn`, `.lcoef`, `.dres`, and `.occres` to that output prefix in the current working directory.
+- Name Slurm scripts as either:
+  - `input/run_Li8_<force>_hw<hw>_Nmax<Nmax>_beta<beta>_<nstates>states.slurm`
+  - or a shorter equivalent when unambiguous, e.g. `input/run_li8_hw16_Nmax10_beta0.slurm`
+- Set Slurm stdout/stderr logs under `output/`, for example:
+  - `output/log_Li8_<force>_emax<emax>_e3max<e3max>_hw<hw>_Nmax<Nmax>_beta<beta>_<nstates>states_%j.out`
+  - `%j` is the Slurm job id.
+- Before submitting a Slurm job, check current node/partition availability and choose resources based on `Nmax`:
+  - For `Nmax < 8`, choose a node with `256G` memory or less when available, and use about `32` OpenMP threads.
+  - For `Nmax >= 8`, choose a node with `512G` memory or more, and use `64` or more OpenMP threads.
+  - If needed for larger runs, request enough resources to occupy the whole selected node.
+  - Do not submit immediately after choosing resources. Present the selected partition/node class, memory class, thread count, and Slurm resource settings to the user and wait for confirmation before `sbatch`.
+- For the NO2B interaction, create a short symlink or copy inside `output/`, for example:
+  - `output/li8_hw<hw>_no2b.bin`
+  - pointing to `/lustre/home/2401110128/Forces/no2b/<force>/Li8/no2b_Li8_<force>_hw<hw>_emax<emax>_e3max<e3max>.bin`
+- Run BIGSTICK from the `output/` directory so the code writes all generated files there and can open the short NO2B filename directly.
+
 ## NO2B binary interaction input
 
 - Ported the NO2B binary reader from the sibling `BigstickPublick-3N` code into this repository.
