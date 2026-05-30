@@ -30,11 +30,13 @@
   - 例：`runs/Li8/EM1.8_2.0_emax12_e3max16/hw16_Nmax2_beta0`
 - 路径/输入名/输出名/Slurm 日志一律用**完整** interaction 标签（如 `EM1.8_2.0_emax12_e3max16`），不要简写成 `EM18` 或省略 `emax12_e3max16`。
 - 核力标签照 NO2B 数据目录名取（如 `EM1.8_2.0`、`DNNLO_go394`），路径/文件名保持一致即可。
-- 每格 output basename 建议带全参数，如 `<Nuc>_<标签>_hw<hw>_Nmax<N>_beta<b>_auto12_no2b_<nkeep>states`。
+- 每格 output basename 带参数，如 `<Nuc>_<标签>_hw<hw>_Nmax<N>_beta<b>_<nkeep>states`。**不要**在提交的 input/output/log 文件名里放 `auto12`、`no2b` 之类——那是输入方法细节，不进命名约定。
 
 ### 核力怎么读（NO2B `no2`）
 
-- NO2B 源：`/tns/mengziyan/tools/no2b/normal-order/data/<INT>/<Nuc>/no2b_<Nuc>_<标签>_hw<hw>_emax<emax>_e3max<e3max>.bin`（emax12 文件每个 ~1.9G）。
+- NO2B 源二进制在**本平台的 NO2B 数据根目录**下，文件名统一为 `no2b_<Nuc>_<标签>_hw<hw>_emax<emax>_e3max<e3max>.bin`（emax12 每个 ~1.9G）。各平台根目录不同，按本平台实际位置取；已知平台根目录（参考）：
+  - 点7：`/tns/mengziyan/tools/no2b/normal-order/data/<标签>/<Nuc>/`
+  - wm2：`/lustre/home/2401110128/Forces/no2b/<标签>/<Nuc>/`
 - BIGSTICK 用 `no2` 格式码读它（reader 见上一节）。**每格运行目录里把源二进制软链成 `<nuc>_hw<hw>_no2b.bin` 这类名字再喂给 BIGSTICK**，避免 `no2b_*.bin` 文件名被当成格式码（前三字符 `no2`）。
 - `auto` 始终设 `12`（匹配 emax12 文件）；用多体 `Nmax` 做实际截断，**不要**拿更小的 `auto` 当截断手段。
 
@@ -107,25 +109,21 @@ ld                      # Lanczos（大 Nmax 换 td，见内存节）
 - 两体密度 m-scheme 累加 `src/bdenslib4.f90`；J-coupling `src/bdenslib5.f90`（XX `couple_2bdensXX`、PN `couple_2bdensPN`、输出 `print_out_2bdens`）
 - BIG↔KSHELL TBTD per-entry 已逐条验证（Mg24/USDB、Mg24/IMSRG、Na21/USDB，max ~1e-5）；关键修复 commit `5670a1c`（dens2bflag 下 full non-Hermitian same-species density path，配套 `bdenslib4/5`、`bjumplib_master/weld`、`bparallel_opbundles`）。判正确性只看与 KSHELL/独立参考的直接吻合，不看差异是否变小。
 
-## TODO — Nmax12 待在外部平台跑（本机 c128m1024 已排满）
+## TODO — Nmax12 待跑（需 ~1 TB 内存节点）
 
-目标：把 Li8 `EM1.8_2.0` 最优参数（beta5）推到 **Nmax12**、**最低 3 态**、**thick-restart Lanczos**，hw = **12, 16, 20** 三个频率。本机 1 TB 节点排满，需换到另一台有 ~1 TB 内存节点的平台跑。下面是另一平台直接照搬即可的全部信息。
+目标：把 Li8 `EM1.8_2.0` 最优参数（beta5）推到 **Nmax12**、**最低 3 态**、**thick-restart Lanczos**，hw = **12, 16, 20** 三个频率。需要一台有 ~1 TB 内存节点的平台。下面是直接照搬即可的全部信息。
 
-### 要带过去的文件
+### 需要的文件
 
 - BIGSTICK OpenMP 可执行：本仓库 `make -C make gfortran-openmp` → `bin/bigstick-openmp.x`。
-- 三个 NO2B 二进制（~1.9G/个），从本机拷：
-  - `no2b_Li8_EM1.8_2.0_hw12_emax12_e3max16.bin`
-  - `no2b_Li8_EM1.8_2.0_hw16_emax12_e3max16.bin`
-  - `no2b_Li8_EM1.8_2.0_hw20_emax12_e3max16.bin`
-  - 本机源目录：`/tns/mengziyan/tools/no2b/normal-order/data/EM1.8_2.0/Li8/`
+- 三个 NO2B 二进制（~1.9G/个）：`no2b_Li8_EM1.8_2.0_hw{12,16,20}_emax12_e3max16.bin`，在本平台 NO2B 数据根目录下取。
 - 每个运行目录里把对应 bin 软链成 `li8_hw<hw>_no2b.bin` 再喂给 BIGSTICK（`no2b_*` 原名会被当格式码）。
 
 ### 输入 deck（hw16 例；换 hw 只改 ① 频率行 `<hw> 5` ② 软链文件名 ③ output basename 里的 hw）
 
 ```
 n
-Li8_EM1.8_2.0_emax12_e3max16_hw16_Nmax12_beta5_auto12_no2b_3states
+Li8_EM1.8_2.0_emax12_e3max16_hw16_Nmax12_beta5_3states
 auto
 12
 3 5
