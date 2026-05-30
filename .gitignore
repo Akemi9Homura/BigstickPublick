@@ -6,6 +6,7 @@
 # Local test/run directories
 /test/
 /runs/
+/Li8_RUN_STATUS.md
 
 # BIGSTICK runtime outputs
 *.bigstick
