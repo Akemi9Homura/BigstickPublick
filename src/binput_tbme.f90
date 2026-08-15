@@ -2869,8 +2869,12 @@ subroutine read_in_no2b_bin(firstread)
   integer :: pcpar,pcref,pcstart
   real(c_double) bar_omega
   integer :: Emax, obme_number, tbme_number
+  integer(kind=8) :: skipped_obme, skipped_tbme
   logical, external :: k1k2_is_zero
   integer :: ierr
+
+  skipped_obme = 0
+  skipped_tbme = 0
 
   if(auto_input)then
      read(autoinputfile,*)hw,betacm
@@ -2932,7 +2936,7 @@ subroutine read_in_no2b_bin(firstread)
         iorba=nosp(d)%orbit
         iorbb=nosp(c)%orbit
         if (iorba==-1 .or. iorbb==-1) then
-           print*,'maybe wrong in ob',d,c
+           skipped_obme = skipped_obme + 1
            cycle
         end if
         if (ita/=itb .or. la/=lb .or. ja/=jb) then
@@ -2965,6 +2969,11 @@ subroutine read_in_no2b_bin(firstread)
         end if
      end do
   end do
+
+  if (skipped_obme > 0) then
+     print*,'Skipped NO2B one-body matrix elements outside active s.p. space:',skipped_obme
+     write(logfile,*)'Skipped NO2B one-body matrix elements outside active s.p. space:',skipped_obme
+  end if
 
   do i=1,(numorb(1)+1)*numorb(1)/2
     iorba=noobmep(i)%cp
@@ -3012,7 +3021,7 @@ subroutine read_in_no2b_bin(firstread)
     itc=nosp(c)%it
     itd=nosp(d)%it
     if (iorba==-1.or.iorbb==-1.or.iorbc==-1.or.iorbd==-1) then
-        print*,'may be wrong iorb',iorba,iorbb,iorbc,iorbd
+        skipped_tbme = skipped_tbme + 1
         cycle
     end if
     phase=1
@@ -3140,6 +3149,11 @@ subroutine read_in_no2b_bin(firstread)
         print*,ita,itb,itc,itd
     end if
   end do
+
+  if (skipped_tbme > 0) then
+     print*,'Skipped NO2B two-body matrix elements outside active s.p. space:',skipped_tbme
+     write(logfile,*)'Skipped NO2B two-body matrix elements outside active s.p. space:',skipped_tbme
+  end if
 
   if (ios == iostat_end) then
      print*,'read file to the end'
