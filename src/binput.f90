@@ -48,6 +48,7 @@ subroutine get_orbit_info
   use reporter
   use bmpi_mod 
   use system_parameters
+  use obs, only: skip_T2
   implicit none 
  
   integer(4)         :: ierr 
@@ -56,12 +57,12 @@ subroutine get_orbit_info
  
   character (len=40) :: filename 
   character (len=1)  :: achar 
-  character (len=3)  :: spformat
+  character (len=16) :: spformat
         
   character (len=70) :: title 
   integer            :: ilast 
   integer            :: wcolumns  ! how many columns for W factors
-  logical            :: success,nushellsp 
+  logical            :: success,nushellsp,general_pn_space
  
  
 !------------------TEMP----------------------------------------------------- 
@@ -79,6 +80,7 @@ subroutine get_orbit_info
 ! KSM - initialize for -Wuninitialized 
   ilast = 0 
   Acore = 0
+  general_pn_space = .false.
  
 !------------------OPEN A FILE---------------------------------------------- 
   success = .false. 
@@ -212,18 +214,22 @@ subroutine get_orbit_info
 !------------------READ PAST POSSIBLE LABEL OF ISO/PN----------------------- 
 ! modified in 7.9.11 to allow for more flexibility
 !
-  if ( iproc == 0 ) read (1,'(a3)') spformat 
+  if ( iproc == 0 ) read (1,'(a)') spformat
 #ifdef _MPI
   call BMPI_BARRIER(MPI_COMM_WORLD,ierr) 
-  call BMPI_BCAST(spformat,3,0,MPI_COMM_WORLD,ierr) 
+  call BMPI_BCAST(spformat,16,0,MPI_COMM_WORLD,ierr)
 #endif
   wcolumns =1 ! default
   
-  select case(spformat) 
+  select case(trim(adjustl(spformat)))
   case ('pns') 
      isoflag  = .false. 
      !     write (6,*) ' .sps file in pn formalism, cannot handle '  
      !     stop 
+  case ('pns_general')
+     isoflag = .false.
+     general_pn_space = .true.
+     skip_T2 = .true.
   case ('iso') 
      isoflag = .true.  
      pnwtflag = .false. 
@@ -291,12 +297,12 @@ subroutine get_orbit_info
  
   else            ! pn-formalism 
      if ( iproc == 0 ) then 
-!        if(wcolumns==1)then
-!           read (1,*) numorb(1),numorb(2)
-!        else
+        if(general_pn_space)then
+           read (1,*) numorb(1),numorb(2)
+        else
            read (1,*) numorb(1)
            numorb(2)=numorb(1)   ! by default, must have the same proton and neutron orbits
-!        end if
+        end if
 
      end if 
 #ifdef _MPI
@@ -305,6 +311,10 @@ subroutine get_orbit_info
      call BMPI_BCAST(numorb(2),1,0,MPI_COMM_WORLD,ierr)
 #endif
      numorbmax = MAX(numorb(1),numorb(2)) 
+     if(general_pn_space .and. iproc==0)then
+        write(6,*)' pns_general: native T^2 disabled; J^2 remains enabled '
+        write(logfile,*)' pns_general: native T^2 disabled; J^2 remains enabled '
+     end if
 !------------------ALLOCATE MEMORY------------------------------------------ 
      allocate ( orbqn(2,numorbmax) ) 
 !------------------READ IN-------------------------------------------------- 
@@ -333,7 +343,7 @@ subroutine get_orbit_info
               read (1,*,end=2001) xn, xl, xj, xw 
               orbqn(2,i)%nr = int(xn) 
               orbqn(2,i)%l = int(xl) 
-              orbqn(2,i)%par = (-1)**(orbqn(1,i)%l) 
+              orbqn(2,i)%par = (-1)**(orbqn(2,i)%l)
               orbqn(2,i)%j = int(2*xj) 
               orbqn(2,i)%w = int(xw) 
            end if 
