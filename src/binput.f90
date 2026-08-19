@@ -48,6 +48,7 @@ subroutine get_orbit_info
   use reporter
   use bmpi_mod 
   use system_parameters
+  use obs, only: skip_T2
   implicit none 
  
   integer(4)         :: ierr 
@@ -57,6 +58,7 @@ subroutine get_orbit_info
   character (len=40) :: filename 
   character (len=1)  :: achar 
   character (len=3)  :: spformat
+  character (len=70) :: orbit_count_line
         
   character (len=70) :: title 
   integer            :: ilast 
@@ -73,6 +75,8 @@ subroutine get_orbit_info
  
   integer            :: i,j,it 
   integer            :: wneg
+  integer            :: count_iostat
+  integer            :: t2_requested
  
   integer :: aerr
  
@@ -291,18 +295,31 @@ subroutine get_orbit_info
  
   else            ! pn-formalism 
      if ( iproc == 0 ) then 
-!        if(wcolumns==1)then
-!			read (1,*) numorb(1),numorb(2) 
-!		else
-			read (1,*) numorb(1)
-			numorb(2)=numorb(1)   ! by default, must have the same proton and neutron orbits
-!		end if
-			
+        ! Historical pns/pnw files provide one count shared by protons and
+        ! neutrons.  Also accept two counts so explicitly charge-dependent
+        ! child spaces can contain different numbers of proton and neutron
+        ! orbits without padding either species.
+        read (1,'(a)') orbit_count_line
+        ! Optional third field: 0 means the supplied child-space mapping does
+        ! not preserve the canonical proton-neutron T^2 operator.  Existing
+        ! one-count and two-count pns/pnw files remain accepted unchanged.
+        read (orbit_count_line,*,iostat=count_iostat) numorb(1),numorb(2),t2_requested
+        if(count_iostat == 0)then
+           if(t2_requested == 0) skip_T2 = .true.
+        else
+           read (orbit_count_line,*,iostat=count_iostat) numorb(1),numorb(2)
+           if(count_iostat /= 0)then
+              read (orbit_count_line,*) numorb(1)
+              numorb(2)=numorb(1)
+           end if
+        end if
+
      end if 
 #ifdef _MPI
      call BMPI_BARRIER(MPI_COMM_WORLD,ierr) 
      call BMPI_BCAST(numorb(1),1,0,MPI_COMM_WORLD,ierr) 
      call BMPI_BCAST(numorb(2),1,0,MPI_COMM_WORLD,ierr) 
+     call BMPI_BCAST(skip_T2,1,0,MPI_COMM_WORLD,ierr)
 #endif
      numorbmax = MAX(numorb(1),numorb(2)) 
 !------------------ALLOCATE MEMORY------------------------------------------ 
@@ -389,7 +406,29 @@ subroutine get_orbit_info
           end do 
  
       end do 
-  end do 
+  end do
+
+! Isospin T^2 requires the proton and neutron one-body spaces to be
+! identical.  General pns child spaces may intentionally differ; angular
+! momentum remains well defined, so compute J^2 but skip only T^2.
+  if(.not.isoflag)then
+     if(numorb(1) /= numorb(2))then
+        skip_T2 = .true.
+     else
+        do i = 1,numorb(1)
+           if(orbqn(1,i)%nr /= orbqn(2,i)%nr .or. &
+              orbqn(1,i)%l  /= orbqn(2,i)%l  .or. &
+              orbqn(1,i)%j  /= orbqn(2,i)%j)then
+              skip_T2 = .true.
+              exit
+           end if
+        end do
+     end if
+  end if
+  if(skip_T2 .and. iproc==0)then
+     write(6,*)' T^2 disabled for this single-particle space; retaining J^2 '
+     write(logfile,*)' T^2 disabled for this single-particle space; retaining J^2 '
+  end if
   
 !--- added in 7.10.7 -- check for negative W and shift if necessary  
 

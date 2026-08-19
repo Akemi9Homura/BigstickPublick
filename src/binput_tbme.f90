@@ -3155,15 +3155,20 @@ subroutine read_in_no2b_bin(firstread)
      write(logfile,*)'Skipped NO2B two-body matrix elements outside active s.p. space:',skipped_tbme
   end if
 
+  ! The final expected TBME is a successful read, so ios is normally zero
+  ! here.  Probe once before diagnosing trailing data; the historical loop
+  ! printed the last valid v2b again and falsely claimed every exact file had
+  ! not reached EOF.
+  read(1,iostat=ios) v2b
   if (ios == iostat_end) then
      print*,'read file to the end'
   else
-     print*,'not the end of file'
+     print*,'WARNING: unexpected trailing data in no2b file'
+     do while (ios /= iostat_end)
+        print*,v2b
+        read(1,iostat=ios) v2b
+     end do
   end if
-  do while (ios /= iostat_end)
-      read(1,iostat=ios) v2b
-      print*,v2b
-  end do
   close(1)
   firstread= .false.
   return
