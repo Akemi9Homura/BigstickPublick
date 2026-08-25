@@ -23,12 +23,9 @@ contains
 	   
 	call_spe = .true.
 	
-	if(.not.subsume_spe .or. spoccflag)return
-	
-	if(np(1)+np(2)<=1)then
-		return
-	end if
-	call_spe = .false.	   
+	! Keep diagonal single-particle energies on the exact one-body path.
+	! Folding them into a coupled two-body table makes the represented
+	! operator depend on an already-applied W/Nmax pair truncation.
 	return
 	   
    end subroutine do_I_subsume_spes	
@@ -52,15 +49,9 @@ contains
 		integer :: kdelta
 		integer :: phasecd,phaseab
 		
-		if(call_spe)return
-		
+		if(np(1)+np(2)<=1)return
 		Afactor = 1.0/float(np(1)+np(2)-1)
 		
-		if(npeff(2) > 0)then
-			do a = 1,numorb(2)
-				nsppot(a,a)=nsppot(a,a)+nspe(a)
-			end do
-		end if
 		if(npeff(2) > 1)then
 			do a = 1,numorb(2)
 				ja = (orbqn(2,a)%j+1)/2
@@ -125,10 +116,6 @@ contains
 		end if			
 				
 		if(npeff(1) > 0)then
-			
-			do a = 1,numorb(1)
-				psppot(a,a)=psppot(a,a)+pspe(a)
-			end do
 			
 			do a = 1,numorb(1)
 				ja = (orbqn(1,a)%j+1)/2

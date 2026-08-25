@@ -2982,7 +2982,8 @@ subroutine read_in_no2b_bin(firstread)
         obme=noobmep(i)%obme
         zb=no2b_zero_body*fact
         obme=obme+zb
-        noobmep(i)%obme=obme
+        pspe(iorba)=pspe(iorba)+obme
+        noobmep(i)%obme=0.0
     end if
   end do
 
@@ -2993,11 +2994,17 @@ subroutine read_in_no2b_bin(firstread)
         obme=noobmen(i)%obme
         zb=no2b_zero_body*fact
         obme=obme+zb
-        noobmen(i)%obme=obme
+        nspe(iorba)=nspe(iorba)+obme
+        noobmen(i)%obme=0.0
     end if
   end do
 
   print*,'NO1B END'
+  ! Diagonal one-body terms, including the distributed zero-body constant,
+  ! are exact single-particle energies and must not depend on the truncated
+  ! coupled-pair table.  Off-diagonal one-body terms still use the fixed-A
+  ! embedding below.
+  call_spe=.true.
   if(np(1)>1) call covertXtoXX(1)
   if(np(2)>1) call covertXtoXX(2)
   if(np(1)>0 .and. np(2)>0) then
