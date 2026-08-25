@@ -109,6 +109,15 @@ subroutine setup_localvectors
 !$omp parallel
    num_threads = omp_get_num_threads();
 !$omp end parallel
+   ! More OpenMP threads than destination-vector entries leaves empty
+   ! ownership slices in getLoadDist.  In very small W/Nmax spaces those
+   ! empty slices can make diagonal SPE contributions overlap or disappear.
+   ! There is no useful work for the excess threads, so cap the team at the
+   ! number of entries before allocating thread-owned work ranges.
+   if (int(v2e - v2s + 1, kind=8) < int(num_threads, kind=8)) then
+      num_threads = int(v2e - v2s + 1, kind=4)
+      call omp_set_num_threads(num_threads)
+   end if
    ompNumThreads = num_threads
    useVec2Thread = useNewReorthog .and. (ompNumThreads > 1) .and. wantUseVec2Thread
       
